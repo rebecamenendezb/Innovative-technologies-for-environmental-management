@@ -1,0 +1,2387 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visual Pollution Analyzer HK</title>
+  <meta name="description" content="Analyze urban visual pollution in Hong Kong with free OpenRouter vision models, compute the Visual Load Index (ICV), and map neurocognitive risk for drivers and pedestrians." />
+  <meta name="theme-color" content="#0b0f19" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='14'%20fill='%230b0f19'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='18'%20fill='none'%20stroke='%233b82f6'%20stroke-width='3'/%3E%3Ccircle%20cx='32'%20cy='32'%20r='7'%20fill='%238b5cf6'/%3E%3Cpath%20d='M32%206v10M32%2048v10M6%2032h10M48%2032h10'%20stroke='%233b82f6'%20stroke-width='3'%20stroke-linecap='round'/%3E%3C/svg%3E" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: '#0b0f19',
+            inkSoft: '#111827',
+            neonBlue: '#3b82f6',
+            neonPurple: '#8b5cf6',
+            riskLow: '#10b981',
+            riskMid: '#f59e0b',
+            riskHigh: '#ef4444'
+          },
+          fontFamily: {
+            sans: ['"Space Grotesk"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace']
+          },
+          boxShadow: {
+            neon: '0 0 30px rgba(59,130,246,.18)',
+            panel: '0 24px 70px rgba(0,0,0,.48)'
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #0b0f19;
+      --ink-soft: #111827;
+      --blue: #3b82f6;
+      --purple: #8b5cf6;
+      --risk: #10b981;
+      --risk-rgb: 16, 185, 129;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      min-height: 100%;
+      background-color: var(--ink);
+    }
+
+    body {
+      margin: 0;
+      color: #e5e7eb;
+      font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      overflow-x: hidden;
+      background-image:
+        radial-gradient(circle at 12% -5%, rgba(59, 130, 246, .15), transparent 34%),
+        radial-gradient(circle at 88% 0%, rgba(139, 92, 246, .13), transparent 36%),
+        radial-gradient(circle at 50% 110%, rgba(59, 130, 246, .07), transparent 48%);
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: .28;
+      background-image:
+        linear-gradient(rgba(59, 130, 246, .055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59, 130, 246, .055) 1px, transparent 1px);
+      background-size: 52px 52px;
+      -webkit-mask-image: radial-gradient(ellipse 88% 72% at 50% 8%, #000 22%, transparent 78%);
+      mask-image: radial-gradient(ellipse 88% 72% at 50% 8%, #000 22%, transparent 78%);
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background: linear-gradient(180deg, transparent 0%, rgba(11, 15, 25, .15) 55%, rgba(11, 15, 25, .75) 100%);
+    }
+
+    ::selection { background: rgba(59, 130, 246, .36); color: #fff; }
+
+    button, input, summary { font: inherit; }
+    button { -webkit-tap-highlight-color: transparent; }
+
+    :focus-visible {
+      outline: 2px solid rgba(96, 165, 250, .95);
+      outline-offset: 2px;
+    }
+
+    .glass-panel {
+      position: relative;
+      border: 1px solid rgba(59, 130, 246, .22);
+      background:
+        linear-gradient(150deg, rgba(20, 29, 48, .82) 0%, rgba(13, 19, 33, .76) 48%, rgba(10, 15, 27, .86) 100%);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, .055),
+        0 24px 70px rgba(0, 0, 0, .42),
+        0 0 32px rgba(59, 130, 246, .055);
+      -webkit-backdrop-filter: blur(16px) saturate(145%);
+      backdrop-filter: blur(16px) saturate(145%);
+    }
+
+    .glass-panel::after {
+      content: '';
+      position: absolute;
+      z-index: 20;
+      top: 0;
+      left: 7%;
+      right: 7%;
+      height: 1px;
+      pointer-events: none;
+      background: linear-gradient(90deg, transparent, rgba(59, 130, 246, .72), rgba(139, 92, 246, .62), transparent);
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: .45rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: .63rem;
+      font-weight: 600;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+
+    .neon-divider {
+      height: 1px;
+      background: linear-gradient(90deg, rgba(59, 130, 246, .52), rgba(139, 92, 246, .36), transparent);
+    }
+
+    .scroll-panel {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(59, 130, 246, .40) transparent;
+      overscroll-behavior: contain;
+    }
+    .scroll-panel::-webkit-scrollbar { width: 6px; }
+    .scroll-panel::-webkit-scrollbar-track { background: transparent; }
+    .scroll-panel::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, rgba(59, 130, 246, .55), rgba(139, 92, 246, .45));
+      border-radius: 99px;
+    }
+
+    .field-shell {
+      border: 1px solid rgba(59, 130, 246, .22);
+      background: rgba(5, 9, 18, .58);
+      transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+    }
+    .field-shell:focus-within {
+      border-color: rgba(96, 165, 250, .78);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, .10), 0 0 24px rgba(59, 130, 246, .12);
+      background: rgba(5, 9, 18, .78);
+    }
+
+    .key-state {
+      display: inline-flex;
+      align-items: center;
+      gap: .32rem;
+      border: 1px solid rgba(100, 116, 139, .26);
+      border-radius: 999px;
+      padding: .20rem .48rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: .54rem;
+      font-weight: 700;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      white-space: nowrap;
+    }
+    .key-state::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: #64748b;
+    }
+    .key-state[data-state="saved"] {
+      color: #6ee7b7;
+      border-color: rgba(16, 185, 129, .28);
+      background: rgba(16, 185, 129, .07);
+    }
+    .key-state[data-state="saved"]::before { background: #10b981; box-shadow: 0 0 8px #10b981; }
+    .key-state[data-state="memory"] {
+      color: #93c5fd;
+      border-color: rgba(59, 130, 246, .28);
+      background: rgba(59, 130, 246, .07);
+    }
+    .key-state[data-state="memory"]::before { background: #3b82f6; box-shadow: 0 0 8px #3b82f6; }
+
+    .icon-button {
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid rgba(148, 163, 184, .18);
+      background: rgba(15, 23, 42, .72);
+      color: #94a3b8;
+      transition: color .18s ease, border-color .18s ease, background .18s ease, transform .18s ease;
+    }
+    .icon-button:hover {
+      color: #dbeafe;
+      border-color: rgba(96, 165, 250, .52);
+      background: rgba(30, 41, 59, .88);
+    }
+    .icon-button:active { transform: scale(.96); }
+
+    .save-key-btn {
+      border: 1px solid rgba(59, 130, 246, .35);
+      background: linear-gradient(135deg, rgba(37, 99, 235, .23), rgba(124, 58, 237, .20));
+      color: #bfdbfe;
+      transition: all .18s ease;
+      white-space: nowrap;
+    }
+    .save-key-btn:hover {
+      border-color: rgba(96, 165, 250, .65);
+      background: linear-gradient(135deg, rgba(37, 99, 235, .34), rgba(124, 58, 237, .29));
+      color: #fff;
+      box-shadow: 0 0 22px rgba(59, 130, 246, .13);
+    }
+
+    .dropzone {
+      position: relative;
+      overflow: hidden;
+      border: 1px dashed rgba(59, 130, 246, .38);
+      background:
+        radial-gradient(circle at 50% 42%, rgba(59, 130, 246, .10), transparent 54%),
+        linear-gradient(145deg, rgba(17, 24, 39, .66), rgba(7, 11, 20, .72));
+      transition: border-color .22s ease, background .22s ease, box-shadow .22s ease, transform .22s ease;
+      cursor: pointer;
+    }
+    .dropzone:hover, .dropzone.is-dragging {
+      border-color: rgba(96, 165, 250, .9);
+      background:
+        radial-gradient(circle at 50% 42%, rgba(59, 130, 246, .18), transparent 62%),
+        linear-gradient(145deg, rgba(23, 35, 61, .80), rgba(8, 13, 25, .84));
+      box-shadow: inset 0 0 38px rgba(59, 130, 246, .08), 0 0 30px rgba(59, 130, 246, .09);
+    }
+    .dropzone.is-dragging { transform: scale(.995); }
+    .dropzone.has-image {
+      border-style: solid;
+      border-color: rgba(59, 130, 246, .46);
+      cursor: default;
+      background: #070b14;
+    }
+    .dropzone.has-image:hover { box-shadow: 0 0 28px rgba(59, 130, 246, .10); }
+
+    .preview-scan { position: relative; overflow: hidden; }
+    .preview-scan::after {
+      content: '';
+      position: absolute;
+      z-index: 3;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+      background: linear-gradient(90deg, transparent, rgba(96, 165, 250, .95), rgba(167, 139, 250, .9), transparent);
+      box-shadow: 0 0 12px rgba(59, 130, 246, .8);
+      animation: previewScan 5.5s ease-in-out infinite;
+    }
+
+    @keyframes previewScan {
+      0%, 8% { top: 0; opacity: 0; }
+      16% { opacity: .65; }
+      84% { opacity: .65; }
+      96%, 100% { top: 100%; opacity: 0; }
+    }
+
+    .analyze-btn {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(96, 165, 250, .55);
+      background: linear-gradient(112deg, #1d4ed8 0%, #4f46e5 50%, #7c3aed 100%);
+      box-shadow: 0 10px 30px rgba(37, 99, 235, .24), inset 0 1px 0 rgba(255, 255, 255, .18);
+      transition: transform .18s ease, box-shadow .18s ease, filter .18s ease, opacity .18s ease;
+    }
+    .analyze-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, .17) 48%, transparent 74%);
+      transform: translateX(-130%);
+      transition: transform .6s ease;
+      pointer-events: none;
+    }
+    .analyze-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      filter: saturate(1.12);
+      box-shadow: 0 16px 42px rgba(79, 70, 229, .34), 0 0 26px rgba(59, 130, 246, .17), inset 0 1px 0 rgba(255, 255, 255, .2);
+    }
+    .analyze-btn:hover:not(:disabled)::before { transform: translateX(130%); }
+    .analyze-btn:active:not(:disabled) { transform: translateY(0) scale(.995); }
+    .analyze-btn:disabled {
+      cursor: not-allowed;
+      opacity: .42;
+      filter: saturate(.45);
+      box-shadow: none;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      flex: 0 0 6px;
+      border-radius: 999px;
+      background: #64748b;
+      transition: background .2s ease, box-shadow .2s ease;
+    }
+    .status-dot[data-tone="idle"] { background: #64748b; }
+    .status-dot[data-tone="ready"] { background: #60a5fa; box-shadow: 0 0 8px rgba(96, 165, 250, .85); }
+    .status-dot[data-tone="working"] { background: #a78bfa; box-shadow: 0 0 9px rgba(167, 139, 250, .95); animation: statusPulse 1.2s ease-in-out infinite; }
+    .status-dot[data-tone="success"] { background: #10b981; box-shadow: 0 0 9px rgba(16, 185, 129, .9); }
+    .status-dot[data-tone="warning"] { background: #f59e0b; box-shadow: 0 0 9px rgba(245, 158, 11, .9); }
+    .status-dot[data-tone="error"] { background: #ef4444; box-shadow: 0 0 9px rgba(239, 68, 68, .9); }
+
+    @keyframes statusPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: .45; transform: scale(.75); }
+    }
+
+    .feedback-box {
+      border: 1px solid rgba(239, 68, 68, .28);
+      background: rgba(239, 68, 68, .075);
+      color: #fecaca;
+    }
+    .feedback-box[data-tone="warning"] {
+      border-color: rgba(245, 158, 11, .30);
+      background: rgba(245, 158, 11, .075);
+      color: #fde68a;
+    }
+    .feedback-box[data-tone="info"] {
+      border-color: rgba(59, 130, 246, .30);
+      background: rgba(59, 130, 246, .075);
+      color: #bfdbfe;
+    }
+
+    .result-hero {
+      --risk: #10b981;
+      --risk-rgb: 16, 185, 129;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(var(--risk-rgb), .34);
+      background:
+        radial-gradient(circle at 90% 0%, rgba(var(--risk-rgb), .17), transparent 47%),
+        linear-gradient(145deg, rgba(17, 24, 39, .94), rgba(7, 11, 20, .94));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 0 34px rgba(var(--risk-rgb), .07);
+      transition: border-color .35s ease, background .35s ease;
+    }
+    .result-hero::after {
+      content: '';
+      position: absolute;
+      right: -28px;
+      bottom: -48px;
+      width: 150px;
+      height: 150px;
+      border: 1px solid rgba(var(--risk-rgb), .18);
+      border-radius: 999px;
+      box-shadow: 0 0 0 24px rgba(var(--risk-rgb), .035), 0 0 0 54px rgba(var(--risk-rgb), .018);
+      pointer-events: none;
+    }
+
+    .risk-card {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, .14);
+      background: linear-gradient(145deg, rgba(15, 23, 42, .65), rgba(8, 12, 22, .60));
+    }
+    .risk-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 2px;
+      background: var(--card-accent, #3b82f6);
+      box-shadow: 0 0 12px var(--card-accent, #3b82f6);
+    }
+
+    .result-enter { animation: resultIn .55s cubic-bezier(.22, 1, .36, 1) both; }
+    @keyframes resultIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .rubric-shell {
+      border: 1px solid rgba(148, 163, 184, .13);
+      background: rgba(7, 11, 20, .42);
+    }
+    .rubric-shell summary {
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+    }
+    .rubric-shell summary::-webkit-details-marker { display: none; }
+    .rubric-chevron { transition: transform .25s ease; }
+    .rubric-shell[open] .rubric-chevron { transform: rotate(180deg); }
+    .rubric-dot {
+      width: 6px;
+      height: 6px;
+      flex: 0 0 6px;
+      border-radius: 999px;
+      margin-top: .42rem;
+    }
+
+    .map-stat {
+      display: flex;
+      align-items: center;
+      gap: .45rem;
+      border: 1px solid rgba(148, 163, 184, .13);
+      border-radius: .6rem;
+      background: rgba(7, 11, 20, .52);
+      padding: .36rem .55rem;
+    }
+
+    .overlay-card {
+      border: 1px solid rgba(59, 130, 246, .25);
+      background: rgba(7, 11, 20, .78);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .32), inset 0 1px 0 rgba(255, 255, 255, .04);
+      -webkit-backdrop-filter: blur(12px) saturate(135%);
+      backdrop-filter: blur(12px) saturate(135%);
+    }
+
+    .map-utility-btn {
+      display: inline-grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border: 1px solid rgba(59, 130, 246, .22);
+      border-radius: .55rem;
+      background: rgba(7, 11, 20, .82);
+      color: #94a3b8;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, .28);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+      transition: color .18s ease, border-color .18s ease, background .18s ease;
+    }
+    .map-utility-btn:hover:not(:disabled) {
+      color: #dbeafe;
+      border-color: rgba(96, 165, 250, .62);
+      background: rgba(15, 23, 42, .95);
+    }
+    .map-utility-btn:disabled { opacity: .32; cursor: not-allowed; }
+
+    .map-empty-hint {
+      border: 1px solid rgba(59, 130, 246, .18);
+      background: rgba(7, 11, 20, .72);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+    }
+
+    /* ---------- Leaflet ---------- */
+    #map {
+      background: #070b14;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .leaflet-container {
+      background: #070b14;
+      outline: none;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .leaflet-tile-pane { filter: saturate(.95) contrast(1.06) brightness(1.12); }
+    .leaflet-control-zoom {
+      border: 1px solid rgba(59, 130, 246, .25) !important;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, .38) !important;
+      overflow: hidden;
+      border-radius: .55rem !important;
+    }
+    .leaflet-control-zoom a {
+      background: rgba(7, 11, 20, .88) !important;
+      color: #93c5fd !important;
+      border-bottom-color: rgba(59, 130, 246, .18) !important;
+      width: 32px !important;
+      height: 32px !important;
+      line-height: 32px !important;
+      font-size: 18px !important;
+    }
+    .leaflet-control-zoom a:hover {
+      background: rgba(15, 23, 42, .98) !important;
+      color: #fff !important;
+    }
+    .leaflet-control-attribution {
+      background: rgba(7, 11, 20, .72) !important;
+      color: #64748b !important;
+      font-size: 9px !important;
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+    }
+    .leaflet-control-attribution a { color: #94a3b8 !important; }
+
+    .risk-div-icon {
+      background: transparent !important;
+      border: 0 !important;
+    }
+    .risk-marker {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      --risk: #10b981;
+    }
+    .risk-core {
+      position: relative;
+      z-index: 3;
+      width: 15px;
+      height: 15px;
+      border-radius: 999px;
+      background: var(--risk);
+      border: 2px solid rgba(255, 255, 255, .74);
+      box-shadow:
+        0 0 0 3px rgba(7, 11, 20, .92),
+        0 0 12px var(--risk),
+        0 0 28px var(--risk);
+      transition: transform .2s ease;
+    }
+    .risk-marker:hover .risk-core { transform: scale(1.18); }
+    .risk-ring {
+      position: absolute;
+      inset: 5px;
+      border: 1px solid var(--risk);
+      border-radius: 999px;
+      box-shadow: 0 0 12px color-mix(in srgb, var(--risk) 45%, transparent);
+      opacity: 0;
+      animation: riskPulse 2.7s ease-out infinite;
+    }
+    .risk-ring-delay { animation-delay: 1.35s; }
+
+    @keyframes riskPulse {
+      0% { transform: scale(.38); opacity: .9; }
+      72% { transform: scale(1.65); opacity: 0; }
+      100% { transform: scale(1.65); opacity: 0; }
+    }
+
+    .risk-popup .leaflet-popup-content-wrapper {
+      padding: 0;
+      overflow: hidden;
+      border: 1px solid rgba(59, 130, 246, .34);
+      border-radius: 14px;
+      background: rgba(9, 14, 25, .97);
+      color: #e5e7eb;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .62), 0 0 36px rgba(59, 130, 246, .11);
+      -webkit-backdrop-filter: blur(18px) saturate(145%);
+      backdrop-filter: blur(18px) saturate(145%);
+    }
+    .risk-popup .leaflet-popup-content { margin: 0; width: 282px !important; }
+    .risk-popup .leaflet-popup-tip {
+      background: rgba(9, 14, 25, .97);
+      border: 1px solid rgba(59, 130, 246, .25);
+      box-shadow: none;
+    }
+    .risk-popup .leaflet-popup-close-button {
+      top: 8px !important;
+      right: 8px !important;
+      z-index: 6;
+      display: grid !important;
+      place-items: center;
+      width: 25px !important;
+      height: 25px !important;
+      border: 1px solid rgba(255, 255, 255, .16);
+      border-radius: 999px;
+      background: rgba(7, 11, 20, .78) !important;
+      color: #e2e8f0 !important;
+      font-size: 17px !important;
+      line-height: 22px !important;
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+    }
+    .risk-popup .leaflet-popup-close-button:hover { background: rgba(15, 23, 42, .96) !important; color: #fff !important; }
+
+    .risk-popup-card {
+      width: 282px;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .popup-thumb {
+      position: relative;
+      height: 128px;
+      overflow: hidden;
+      background: #070b14;
+    }
+    .popup-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .popup-thumb-shade {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(7, 11, 20, .06) 20%, rgba(7, 11, 20, .85) 100%);
+    }
+    .popup-badge {
+      position: absolute;
+      left: 12px;
+      bottom: 10px;
+      max-width: calc(100% - 24px);
+      border: 1px solid rgba(var(--risk-rgb), .55);
+      border-radius: 999px;
+      background: rgba(var(--risk-rgb), .16);
+      color: var(--risk);
+      padding: .28rem .5rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 8px;
+      font-weight: 700;
+      line-height: 1.25;
+      letter-spacing: .08em;
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+    }
+    .popup-body { padding: 13px 14px 15px; }
+    .popup-kicker {
+      margin: 0 0 4px;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: .17em;
+      color: #64748b;
+    }
+    .popup-title {
+      margin: 0;
+      color: #f8fafc;
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .popup-score-line {
+      display: flex;
+      align-items: baseline;
+      gap: 3px;
+      margin-top: 5px;
+    }
+    .popup-score {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1;
+      color: var(--risk);
+      text-shadow: 0 0 16px rgba(var(--risk-rgb), .38);
+    }
+    .popup-score-max { color: #64748b; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; }
+    .popup-risk-label {
+      margin-left: auto;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      color: var(--risk);
+    }
+    .popup-justification {
+      margin: 8px 0 0;
+      color: #94a3b8;
+      font-size: 10.5px;
+      line-height: 1.48;
+    }
+    .popup-coords {
+      margin: 9px 0 0;
+      padding-top: 8px;
+      border-top: 1px solid rgba(148, 163, 184, .12);
+      color: #64748b;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 8px;
+      letter-spacing: .08em;
+    }
+
+    .toast-item {
+      display: flex;
+      align-items: flex-start;
+      gap: .65rem;
+      width: min(360px, calc(100vw - 2rem));
+      border: 1px solid rgba(59, 130, 246, .28);
+      border-radius: .8rem;
+      background: rgba(9, 14, 25, .95);
+      color: #cbd5e1;
+      padding: .78rem .9rem;
+      box-shadow: 0 18px 45px rgba(0, 0, 0, .55), 0 0 30px rgba(59, 130, 246, .07);
+      -webkit-backdrop-filter: blur(16px);
+      backdrop-filter: blur(16px);
+      opacity: 0;
+      transform: translateX(18px) scale(.98);
+      transition: opacity .24s ease, transform .24s ease;
+      font-size: .78rem;
+      line-height: 1.4;
+    }
+    .toast-item.is-visible { opacity: 1; transform: translateX(0) scale(1); }
+    .toast-item::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      flex: 0 0 6px;
+      margin-top: .35rem;
+      border-radius: 999px;
+      background: #3b82f6;
+      box-shadow: 0 0 8px rgba(59, 130, 246, .8);
+    }
+    .toast-item[data-type="success"] { border-color: rgba(16, 185, 129, .3); }
+    .toast-item[data-type="success"]::before { background: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, .85); }
+    .toast-item[data-type="warning"] { border-color: rgba(245, 158, 11, .32); }
+    .toast-item[data-type="warning"]::before { background: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, .85); }
+    .toast-item[data-type="error"] { border-color: rgba(239, 68, 68, .34); }
+    .toast-item[data-type="error"]::before { background: #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, .85); }
+
+    @media (max-width: 1023px) {
+      .glass-panel::after { left: 4%; right: 4%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div class="relative z-10 flex h-dvh min-h-[720px] w-full flex-col">
+    <!-- ==================== TOP BAR ==================== -->
+    <header class="relative z-30 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-blue-500/20 bg-[#0b0f19]/70 px-4 py-3 shadow-[0_10px_40px_rgba(0,0,0,.24)] backdrop-blur-md sm:px-5 xl:px-6">
+      <div class="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-blue-500/45 to-transparent"></div>
+
+      <div class="flex min-w-0 items-center gap-3">
+        <div class="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-blue-500/40 bg-gradient-to-br from-blue-500/20 via-slate-900/60 to-purple-500/20 shadow-[0_0_28px_rgba(59,130,246,.17)]">
+          <svg class="h-6 w-6 text-blue-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <circle cx="12" cy="12" r="7.2"></circle>
+            <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"></circle>
+            <path d="M12 2.2v3.2M12 18.6v3.2M2.2 12h3.2M18.6 12h3.2" stroke-linecap="round"></path>
+          </svg>
+          <span class="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_9px_rgba(52,211,153,.95)]">
+            <span class="absolute inset-0 animate-ping rounded-full bg-emerald-400/60"></span>
+          </span>
+        </div>
+
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <h1 class="truncate text-[13px] font-bold uppercase tracking-[0.1em] text-white sm:text-[15px]">Visual Pollution Analyzer HK</h1>
+            <span class="hidden rounded border border-purple-400/25 bg-purple-500/10 px-1.5 py-0.5 font-mono text-[8px] font-semibold tracking-[0.12em] text-purple-300 sm:inline-flex">OPENROUTER</span>
+          </div>
+          <p class="mt-0.5 truncate text-[9px] font-medium uppercase tracking-[0.21em] text-slate-500 sm:text-[10px]">Urban visual pollution monitor · Hong Kong</p>
+        </div>
+      </div>
+
+      <div class="flex w-full items-center gap-2 sm:w-auto">
+        <div class="hidden items-center gap-2 pr-1 xl:flex">
+          <span class="font-mono text-[8px] font-semibold uppercase tracking-[0.17em] text-slate-600">Local key</span>
+          <span id="keyStateBadge" class="key-state" data-state="empty">No key</span>
+        </div>
+
+        <label for="apiKeyInput" class="sr-only">OpenRouter API Key</label>
+        <div class="field-shell flex h-10 min-w-0 flex-1 items-center rounded-lg sm:w-[286px] sm:flex-none">
+          <div class="grid h-full w-9 shrink-0 place-items-center text-slate-500">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+              <circle cx="7.5" cy="15.5" r="4.5"></circle>
+              <path d="m10.7 12.3 8.6-8.6M16.5 6.5l2 2M14 9l2 2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </div>
+          <input id="apiKeyInput" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"
+            placeholder="Paste your OpenRouter API Key"
+            class="h-full min-w-0 flex-1 border-0 bg-transparent py-2 pr-1 font-mono text-[11px] text-blue-100 outline-none placeholder:text-slate-600" />
+          <button id="toggleKeyBtn" type="button" class="icon-button mr-1.5 h-7 w-7 shrink-0 rounded-md border-0 bg-transparent" title="Show key" aria-label="Show key" aria-pressed="false">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+              <path d="M2.4 12s3.5-6.1 9.6-6.1S21.6 12 21.6 12s-3.5 6.1-9.6 6.1S2.4 12 2.4 12Z" stroke-linecap="round" stroke-linejoin="round"></path>
+              <circle cx="12" cy="12" r="2.8"></circle>
+            </svg>
+          </button>
+        </div>
+
+        <button id="saveKeyBtn" type="button" title="Save the OpenRouter API key" aria-label="Save the OpenRouter API key" class="save-key-btn flex h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-[10px] font-semibold uppercase tracking-[0.13em]">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M5 3.5h11.5L20.5 7v13.5h-17v-17Z" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M8 3.5v6h7v-6M8 20.5v-7h8v7" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+          <span class="hidden xl:inline">Save</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ==================== MAIN WORKSPACE ==================== -->
+    <main class="relative z-10 grid min-h-0 w-full flex-1 gap-4 overflow-y-auto p-3 sm:p-4 md:grid-cols-[minmax(360px,380px)_minmax(0,1fr)] md:overflow-hidden lg:grid-cols-[minmax(370px,430px)_minmax(0,1fr)] lg:overflow-hidden">
+      <!-- ============ LEFT: CONTROL + RESULTS ============ -->
+      <aside class="glass-panel flex flex-col overflow-visible rounded-2xl md:min-h-0 md:overflow-hidden lg:min-h-0 lg:overflow-hidden" aria-label="Control panel and results">
+        <div id="panelScroll" class="scroll-panel p-4 sm:p-5 md:min-h-0 md:flex-1 md:overflow-y-auto lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+          <div class="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <div class="eyebrow"><span class="status-dot" data-tone="ready"></span> Capture module</div>
+              <h2 class="mt-1 text-[17px] font-semibold tracking-tight text-slate-100">Urban scene analysis</h2>
+              <p class="mt-1 max-w-[31rem] text-[11px] leading-relaxed text-slate-500">Upload a real street photograph. OpenRouter's vision model will assess luminance, clutter, signage, and cognitive load.</p>
+            </div>
+            <div class="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-purple-400/20 bg-purple-500/10 text-purple-300">
+              <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                <path d="M4 8.5V4h4.5M15.5 4H20v4.5M20 15.5V20h-4.5M8.5 20H4v-4.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                <circle cx="12" cy="12" r="3.2"></circle>
+              </svg>
+            </div>
+          </div>
+
+          <div class="neon-divider mb-4"></div>
+
+          <!-- Image upload -->
+          <section aria-labelledby="imageFieldLabel">
+            <div class="mb-2 flex items-center justify-between gap-3">
+              <h3 id="imageFieldLabel" class="font-mono text-[9px] font-semibold uppercase tracking-[0.17em] text-slate-500">01 · Reference image</h3>
+              <span class="font-mono text-[8px] uppercase tracking-[0.14em] text-slate-600">JPG · PNG · WebP · GIF</span>
+            </div>
+
+            <div id="dropZone" class="dropzone rounded-xl p-4">
+              <input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden" />
+
+              <button id="dropEmpty" type="button" class="flex min-h-[138px] w-full flex-col items-center justify-center rounded-lg text-center">
+                <span class="mb-3 grid h-12 w-12 place-items-center rounded-xl border border-blue-400/25 bg-blue-500/10 text-blue-300 shadow-[0_0_28px_rgba(59,130,246,.10)]">
+                  <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" aria-hidden="true">
+                    <path d="M4 16.5V19a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2.5M7.5 7.5 12 3l4.5 4.5M12 3v11.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </span>
+                <span class="text-[12px] font-semibold text-slate-300">Drag an image here</span>
+                <span class="mt-1 text-[10px] text-slate-600">or click to browse · max. 10 MB</span>
+                <span class="mt-3 rounded-full border border-blue-400/20 bg-blue-500/[.07] px-2.5 py-1 font-mono text-[8px] uppercase tracking-[0.16em] text-blue-300/80">Local file · private analysis</span>
+              </button>
+
+              <div id="imagePreviewWrap" class="preview-scan hidden">
+                <button id="replaceImageBtn" type="button" class="block w-full rounded-lg" aria-label="Replace the uploaded image">
+                  <img id="imagePreview" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="Preview of the urban image" class="h-[196px] w-full rounded-lg object-cover" />
+                </button>
+                <div class="pointer-events-none absolute inset-x-0 bottom-0 z-[4] rounded-b-lg bg-gradient-to-t from-[#070b14] via-[#070b14]/80 to-transparent px-3 pb-2.5 pt-10">
+                  <p id="imageMeta" class="truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-300"></p>
+                  <p class="mt-1 text-[9px] text-slate-500">Click the image to replace it</p>
+                </div>
+                <button id="removeImageBtn" type="button" class="icon-button absolute right-2.5 top-2.5 z-[6] h-8 w-8 rounded-full border-white/20 bg-[#070b14]/80" title="Remove image" aria-label="Remove image">
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                    <path d="m6.5 6.5 11 11M17.5 6.5l-11 11" stroke-linecap="round"></path>
+                  </svg>
+                </button>
+                <div class="pointer-events-none absolute left-2.5 top-2.5 z-[5] flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-[#070b14]/80 px-2 py-1 font-mono text-[8px] font-semibold uppercase tracking-[0.12em] text-emerald-300">
+                  <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_7px_rgba(52,211,153,.9)]"></span>
+                  Image loaded
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Location -->
+          <section class="mt-4" aria-labelledby="locationFieldLabel">
+            <div class="mb-2 flex items-center justify-between gap-3">
+              <h3 id="locationFieldLabel" class="font-mono text-[9px] font-semibold uppercase tracking-[0.17em] text-slate-500">02 · Hong Kong location</h3>
+              <span class="font-mono text-[8px] uppercase tracking-[0.14em] text-slate-600">Nominatim / OSM</span>
+            </div>
+            <label for="locationInput" class="sr-only">Hong Kong location</label>
+
+            <div class="field-shell flex h-11 items-center rounded-lg">
+              <div class="grid h-full w-10 shrink-0 place-items-center text-slate-500">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                  <path d="M20 10.3c0 5.2-8 11.2-8 11.2S4 15.5 4 10.3a8 8 0 1 1 16 0Z" stroke-linecap="round" stroke-linejoin="round"></path>
+                  <circle cx="12" cy="10" r="2.6"></circle>
+                </svg>
+              </div>
+              <input id="locationInput" type="text" value="Mong Kok" autocomplete="off" spellcheck="false" placeholder="e.g. Mong Kok, Central, Tsim Sha Tsui"
+                class="h-full min-w-0 flex-1 border-0 bg-transparent py-2 pr-3 text-[12px] font-medium text-slate-100 outline-none placeholder:text-slate-600" />
+            </div>
+
+            <div class="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label="Suggested locations">
+              <span class="mr-0.5 font-mono text-[8px] uppercase tracking-[0.12em] text-slate-600">Quick picks</span>
+              <button type="button" data-location="Mong Kok" class="zone-chip rounded-full border border-blue-400/15 bg-slate-900/45 px-2 py-1 font-mono text-[8px] tracking-[0.06em] text-slate-400 transition hover:border-blue-400/45 hover:text-blue-200">Mong Kok</button>
+              <button type="button" data-location="Tsim Sha Tsui" class="zone-chip rounded-full border border-blue-400/15 bg-slate-900/45 px-2 py-1 font-mono text-[8px] tracking-[0.06em] text-slate-400 transition hover:border-blue-400/45 hover:text-blue-200">Tsim Sha Tsui</button>
+              <button type="button" data-location="Central" class="zone-chip rounded-full border border-blue-400/15 bg-slate-900/45 px-2 py-1 font-mono text-[8px] tracking-[0.06em] text-slate-400 transition hover:border-blue-400/45 hover:text-blue-200">Central</button>
+              <button type="button" data-location="Causeway Bay" class="zone-chip rounded-full border border-blue-400/15 bg-slate-900/45 px-2 py-1 font-mono text-[8px] tracking-[0.06em] text-slate-400 transition hover:border-blue-400/45 hover:text-blue-200">Causeway Bay</button>
+            </div>
+          </section>
+
+          <!-- Analyze -->
+          <div class="mt-4">
+            <button id="analyzeBtn" type="button" disabled class="analyze-btn flex h-12 w-full items-center justify-center rounded-xl px-4 text-[12px] font-semibold text-white">
+              <span id="analyzeIdle" class="flex items-center justify-center gap-2">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" stroke-linecap="round"></path>
+                  <path d="M7.5 12h9M12 7.5v9" stroke-linecap="round"></path>
+                </svg>
+                Analyze visual pollution
+              </span>
+              <span id="analyzeLoading" class="hidden items-center justify-center gap-2">
+                <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-opacity=".25" stroke-width="2.2"></circle>
+                  <path d="M20.5 12a8.5 8.5 0 0 0-8.5-8.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path>
+                </svg>
+                Assessing urban scene…
+              </span>
+            </button>
+
+            <div class="mt-2.5 flex items-center gap-2 px-0.5" aria-live="polite">
+              <span id="analysisStatusDot" class="status-dot" data-tone="idle"></span>
+              <span id="analysisStatusText" class="text-[10px] leading-snug text-slate-500">Upload an image to start the analysis.</span>
+            </div>
+
+            <div id="feedbackBox" class="feedback-box mt-3 hidden rounded-lg px-3 py-2.5" data-tone="error" role="alert" aria-live="assertive">
+              <div class="flex items-start gap-2">
+                <svg class="mt-0.5 h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"></circle>
+                  <path d="M12 7.5v5.2M12 16.4v.1" stroke-linecap="round"></path>
+                </svg>
+                <p id="feedbackText" class="text-[10px] leading-relaxed"></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Results -->
+          <section id="resultsPanel" class="result-enter mt-5 hidden" aria-live="polite" aria-label="Diagnostic results">
+            <div class="mb-2 flex items-center justify-between gap-3">
+              <span class="font-mono text-[9px] font-semibold uppercase tracking-[0.17em] text-slate-500">03 · Risk diagnosis</span>
+              <span class="inline-flex items-center gap-1.5 rounded-full border border-purple-400/20 bg-purple-500/[.07] px-2 py-1 font-mono text-[8px] font-semibold uppercase tracking-[0.13em] text-purple-300">
+                <span class="h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_7px_rgba(167,139,250,.9)]"></span>
+                OpenRouter Vision
+              </span>
+            </div>
+
+            <div id="resultHero" class="result-hero rounded-xl p-4">
+              <div class="relative z-10 flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <span id="categoryBadge" class="inline-flex max-w-full rounded-full border px-2.5 py-1 font-mono text-[9px] font-bold leading-tight tracking-[0.08em]">CATEGORY 3: LOW RISK</span>
+                  <p class="mt-2.5 flex items-center gap-1.5 text-[11px] text-slate-400">
+                    <svg class="h-3 w-3 shrink-0 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                      <path d="M20 10.3c0 5.2-8 11.2-8 11.2S4 15.5 4 10.3a8 8 0 1 1 16 0Z" stroke-linecap="round" stroke-linejoin="round"></path>
+                      <circle cx="12" cy="10" r="2.6"></circle>
+                    </svg>
+                    <span id="resultLocation" class="truncate">Mong Kok</span>
+                  </p>
+                </div>
+                <div class="shrink-0 text-right">
+                  <span class="font-mono text-[8px] font-semibold uppercase tracking-[0.17em] text-slate-500">ICV</span>
+                  <div class="mt-0.5 flex items-start justify-end gap-0.5">
+                    <span id="icvValue" class="font-mono text-[38px] font-bold leading-none tracking-[-0.06em] text-slate-100">0.0</span>
+                    <span class="mt-1 font-mono text-[10px] text-slate-500">/10</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="relative z-10 mt-3.5">
+                <div id="icvProgress" class="h-1.5 overflow-hidden rounded-full bg-white/[.08]" role="progressbar" aria-label="Visual Load Index" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0">
+                  <div id="icvBar" class="h-full w-0 rounded-full transition-[width] duration-1000 ease-out" style="background: var(--risk); box-shadow: 0 0 12px var(--risk);"></div>
+                </div>
+                <div class="mt-1.5 flex justify-between font-mono text-[7px] uppercase tracking-[0.1em] text-slate-600">
+                  <span>0 · Low</span>
+                  <span>3 · Medium</span>
+                  <span>7 · High</span>
+                  <span>10</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-3.5">
+              <p class="font-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">Technical justification</p>
+              <p id="justificationText" class="mt-1.5 text-[11px] leading-relaxed text-slate-300"></p>
+            </div>
+
+            <div class="mt-3.5 space-y-2.5">
+              <article class="risk-card rounded-lg p-3" style="--card-accent:#3b82f6">
+                <div class="flex items-start gap-2.5">
+                  <div class="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-blue-400/20 bg-blue-500/10 text-blue-300">
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                      <path d="m5 11 1.6-4.2A2 2 0 0 1 8.5 5.5h7a2 2 0 0 1 1.9 1.3L19 11M5 11h14M5 11v6.5h2.2V19h2.6v-1.5h4.4V19h2.6v-1.5H19V11" stroke-linecap="round" stroke-linejoin="round"></path>
+                      <path d="M8 14h.01M16 14h.01" stroke-linecap="round"></path>
+                    </svg>
+                  </div>
+                  <div class="min-w-0">
+                    <h3 class="font-mono text-[9px] font-bold uppercase tracking-[0.15em] text-blue-300">Drivers</h3>
+                    <p id="driverRisksText" class="mt-1 text-[10.5px] leading-relaxed text-slate-400"></p>
+                  </div>
+                </div>
+              </article>
+
+              <article class="risk-card rounded-lg p-3" style="--card-accent:#8b5cf6">
+                <div class="flex items-start gap-2.5">
+                  <div class="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-purple-400/20 bg-purple-500/10 text-purple-300">
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                      <circle cx="12" cy="4.6" r="2"></circle>
+                      <path d="m9.5 21 1-5.2-1.8-2.6.8-4 3.1 2.1 2.5 1.1M14.7 21l-1.2-5.2 1.3-2.4M8.7 9.2 6 10.5M15.6 9.3l2.5 2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
+                  </div>
+                  <div class="min-w-0">
+                    <h3 class="font-mono text-[9px] font-bold uppercase tracking-[0.15em] text-purple-300">Pedestrians</h3>
+                    <p id="pedestrianRisksText" class="mt-1 text-[10.5px] leading-relaxed text-slate-400"></p>
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-slate-700/40 pt-2.5 text-[8px] text-slate-600">
+              <span class="inline-flex items-center gap-1 font-mono">
+                <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l2.5 1.5" stroke-linecap="round"></path>
+                </svg>
+                <span id="resultTimestamp"></span>
+              </span>
+              <span class="h-2.5 w-px bg-slate-700/60"></span>
+              <span id="resultCoords" class="font-mono truncate"></span>
+            </div>
+          </section>
+
+          <!-- Scientific rubric -->
+          <details class="rubric-shell mt-4 rounded-xl">
+            <summary class="flex items-center justify-between gap-3 px-3 py-2.5">
+              <span class="flex items-center gap-2">
+                <svg class="h-3.5 w-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                  <path d="M4.5 5.5h6a2 2 0 0 1 2 2v11a1.7 1.7 0 0 0-1.7-1.7H4.5v-11ZM19.5 5.5h-6v13a1.7 1.7 0 0 1 1.7-1.7h4.3v-11Z" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+                <span class="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400">Scientific reference rubric</span>
+              </span>
+              <svg class="rubric-chevron h-3.5 w-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="m7 9.5 5 5 5-5" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+            </summary>
+            <div class="border-t border-slate-700/35 px-3 pb-3 pt-2.5">
+              <p class="text-[9.5px] leading-relaxed text-slate-500">Assessed factors: night-time luminance, dynamism, advertising density, signage obstruction, scale, chroma, and proximity to decision points.</p>
+              <div class="mt-2.5 space-y-2">
+                <div class="flex items-start gap-2">
+                  <span class="rubric-dot" style="background:#10b981;box-shadow:0 0 8px rgba(16,185,129,.8)"></span>
+                  <p class="text-[9px] leading-relaxed text-slate-500"><strong class="font-mono text-[8px] uppercase tracking-[.08em] text-emerald-300">C3 · Low 0.0–2.9</strong><br />Indirect light &lt;100 cd/m² · static · ≤1 element/200 m · set back &gt;3 m from the carriageway. Focused attention and 0.75–1.0 s reaction time.</p>
+                </div>
+                <div class="flex items-start gap-2">
+                  <span class="rubric-dot" style="background:#f59e0b;box-shadow:0 0 8px rgba(245,158,11,.8)"></span>
+                  <p class="text-[9px] leading-relaxed text-slate-500"><strong class="font-mono text-[8px] uppercase tracking-[.08em] text-amber-300">C2 · Medium 3.0–6.9</strong><br />150–499 cd/m² · rotation or sequence · 2–4 elements/100 m · competes in peripheral vision. Tunnel vision, fatigue, and mind-wandering.</p>
+                </div>
+                <div class="flex items-start gap-2">
+                  <span class="rubric-dot" style="background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.8)"></span>
+                  <p class="text-[9px] leading-relaxed text-slate-500"><strong class="font-mono text-[8px] uppercase tracking-[.08em] text-red-300">C1 · High 7.0–10.0</strong><br />&gt;500 cd/m² · flicker &lt;8 s · &gt;5 elements/50 m · sign occlusion · intersections &lt;30 m. Inattentional blindness and braking delay +0.6–1.2 s.</p>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <p class="mt-3 text-center text-[8.5px] leading-relaxed text-slate-600">The key is stored only in this browser's <span class="text-slate-500">localStorage</span>. It is never sent to any server of ours.</p>
+        </div>
+      </aside>
+
+      <!-- ============ RIGHT: MAP DASHBOARD ============ -->
+      <section class="glass-panel flex min-h-[620px] min-w-0 flex-col overflow-hidden rounded-2xl md:min-h-0 lg:min-h-0" aria-label="Hong Kong geospatial dashboard">
+        <div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-blue-500/15 px-4 py-3 sm:px-5">
+          <div class="min-w-0">
+            <div class="eyebrow"><span class="status-dot" data-tone="success"></span> Geospatial dashboard</div>
+            <div class="mt-1 flex items-center gap-2">
+              <h2 class="truncate text-[15px] font-semibold tracking-tight text-slate-100 sm:text-base">ICV risk map · Hong Kong</h2>
+              <span class="hidden rounded border border-emerald-400/20 bg-emerald-500/[.07] px-1.5 py-0.5 font-mono text-[7px] font-semibold uppercase tracking-[.12em] text-emerald-300 sm:inline-flex">Live</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <div class="map-stat" title="Analyzed risk points">
+              <span id="mapPointCount" class="font-mono text-sm font-bold leading-none text-slate-100">0</span>
+              <span id="mapPointLabel" class="font-mono text-[7px] uppercase tracking-[0.12em] text-slate-500">Points</span>
+            </div>
+            <div class="map-stat" title="Average Visual Load Index">
+              <span id="mapAvgIcv" class="font-mono text-sm font-bold leading-none text-slate-100">—</span>
+              <span class="font-mono text-[7px] uppercase tracking-[0.12em] text-slate-500">Avg ICV</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="mapShell" class="relative min-h-[540px] flex-1 overflow-hidden md:min-h-0 lg:min-h-0">
+          <div id="map" class="absolute inset-0 z-0" role="region" aria-label="Interactive map of Hong Kong"></div>
+
+          <div id="mapLoadError" class="absolute inset-0 z-30 hidden place-items-center bg-[#070b14] p-6 text-center">
+            <div class="max-w-sm">
+              <div class="mx-auto grid h-12 w-12 place-items-center rounded-full border border-red-400/30 bg-red-500/10 text-red-300">
+                <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.2M12 16.4v.1" stroke-linecap="round"></path></svg>
+              </div>
+              <p class="mt-3 text-sm font-semibold text-slate-200">Could not initialize the map</p>
+              <p class="mt-1 text-[11px] leading-relaxed text-slate-500">Check your internet connection and reload the page to load Leaflet and the map tiles.</p>
+            </div>
+          </div>
+
+          <div class="pointer-events-none absolute left-3 top-3 z-10 max-w-[calc(100%_-_6.5rem)] sm:left-4 sm:top-4">
+            <div class="overlay-card rounded-xl px-3 py-2.5">
+              <div class="flex items-center gap-2">
+                <span id="mapStatusDot" class="status-dot" data-tone="success"></span>
+                <span id="mapStatusText" class="font-mono text-[8px] font-bold uppercase tracking-[0.16em] text-emerald-300">Map clear</span>
+              </div>
+              <p id="mapZoneLabel" class="mt-1.5 truncate font-mono text-[8px] uppercase tracking-[0.09em] text-slate-500">Hong Kong · No points loaded</p>
+              <p id="mapCoords" class="mt-1 font-mono text-[8px] tracking-[0.08em] text-blue-300/70">22.3193° N · 114.1694° E</p>
+            </div>
+          </div>
+
+          <div class="absolute right-3 top-3 z-10 flex items-center gap-1.5 sm:right-4 sm:top-4">
+            <button id="recenterMapBtn" type="button" class="map-utility-btn" title="Center on Hong Kong" aria-label="Center the map on Hong Kong">
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                <circle cx="12" cy="12" r="6.5"></circle><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"></circle>
+                <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" stroke-linecap="round"></path>
+              </svg>
+            </button>
+            <button id="clearMapBtn" type="button" class="map-utility-btn" title="Clear all points" aria-label="Clear all points from the map" disabled>
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                <path d="M4.5 7h15M9 7V4.8h6V7M6.5 7l.8 12.2h9.4L17.5 7" stroke-linecap="round" stroke-linejoin="round"></path>
+                <path d="M10 10.5v5.3M14 10.5v5.3" stroke-linecap="round"></path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="pointer-events-none absolute bottom-4 left-3 z-10 sm:left-4">
+            <div class="overlay-card rounded-xl px-3 py-2.5">
+              <p class="mb-2 font-mono text-[7px] font-semibold uppercase tracking-[0.17em] text-slate-500">Risk level</p>
+              <div class="space-y-1.5">
+                <div class="flex items-center gap-2">
+                  <span class="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,.85)]"></span>
+                  <span class="font-mono text-[8px] tracking-[0.05em] text-slate-400">Low · 0.0–2.9</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,.85)]"></span>
+                  <span class="font-mono text-[8px] tracking-[0.05em] text-slate-400">Medium · 3.0–6.9</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,.9)]"></span>
+                  <span class="font-mono text-[8px] tracking-[0.05em] text-slate-400">High · 7.0–10.0</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="mapEmptyHint" class="map-empty-hint pointer-events-none absolute left-1/2 top-1/2 z-10 w-max max-w-[calc(100%_-_1.5rem)] -translate-x-1/2 -translate-y-1/2 rounded-full px-3 py-1.5">
+            <p class="flex items-center justify-center gap-2 whitespace-normal text-center font-mono text-[8px] uppercase tracking-[0.13em] text-slate-500 sm:whitespace-nowrap">
+              <svg class="h-3 w-3 text-blue-400/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                <path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11Z" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="12" cy="10" r="2.4"></circle>
+              </svg>
+              Analyze an image to drop the first point
+            </p>
+          </div>
+        </div>
+
+        <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-blue-500/10 px-4 py-2.5">
+          <span class="font-mono text-[7.5px] uppercase tracking-[0.14em] text-slate-600">Esri World Dark Gray · OpenStreetMap</span>
+          <span class="font-mono text-[7.5px] uppercase tracking-[0.14em] text-slate-600">Geographic jitter ±0.003°</span>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toastStack" class="pointer-events-none fixed right-3 top-[86px] z-[1200] flex flex-col items-end gap-2 sm:right-5" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+(function () {
+  'use strict';
+
+  const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
+  // Free vision models. They are tried in order until one responds.
+  // The first two are the requested models; if OpenRouter no longer offers them,
+  // current free alternatives with image support are used instead.
+  const OPENROUTER_MODELS = [
+    { id: 'google/gemini-2.5-flash:free', label: 'Gemini 2.5 Flash (free)' },
+    { id: 'qwen/qwen-2-vl-7b-instruct:free', label: 'Qwen2-VL 7B (free)' },
+    { id: 'google/gemma-4-31b-it:free', label: 'Gemma 4 31B (free)' },
+    { id: 'nvidia/nemotron-3.5-super-vl:free', label: 'Nemotron 3.5 Super VL (free)' }
+  ];
+  const KEY_STORAGE = 'hk_visual_risk_openrouter_key_v1';
+  const HK_CENTER = [22.3193, 114.1694];
+  // Hong Kong bounding box (minLon,minLat,maxLon,maxLat) used to constrain Nominatim.
+  const HK_VIEWBOX = '113.82,22.14,114.45,22.57';
+  const MAX_FILE_SIZE = 10 * 1024 * 1024;
+  const SUPPORTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+  const JITTER_RANGE = 0.003;
+
+  const RISK_LEVELS = {
+    green: {
+      key: 'green',
+      color: '#10b981',
+      rgb: '16, 185, 129',
+      category: 'CATEGORY 3: LOW RISK',
+      shortLabel: 'LOW RISK',
+      name: 'Low-risk'
+    },
+    yellow: {
+      key: 'yellow',
+      color: '#f59e0b',
+      rgb: '245, 158, 11',
+      category: 'CATEGORY 2: MEDIUM RISK',
+      shortLabel: 'MEDIUM RISK',
+      name: 'Medium-risk'
+    },
+    red: {
+      key: 'red',
+      color: '#ef4444',
+      rgb: '239, 68, 68',
+      category: 'CATEGORY 1: HIGH RISK',
+      shortLabel: 'HIGH RISK',
+      name: 'High-risk'
+    }
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const dom = {
+    apiKeyInput: $('apiKeyInput'),
+    toggleKeyBtn: $('toggleKeyBtn'),
+    saveKeyBtn: $('saveKeyBtn'),
+    keyStateBadge: $('keyStateBadge'),
+    dropZone: $('dropZone'),
+    imageInput: $('imageInput'),
+    dropEmpty: $('dropEmpty'),
+    imagePreviewWrap: $('imagePreviewWrap'),
+    imagePreview: $('imagePreview'),
+    imageMeta: $('imageMeta'),
+    replaceImageBtn: $('replaceImageBtn'),
+    removeImageBtn: $('removeImageBtn'),
+    locationInput: $('locationInput'),
+    analyzeBtn: $('analyzeBtn'),
+    analyzeIdle: $('analyzeIdle'),
+    analyzeLoading: $('analyzeLoading'),
+    analysisStatusDot: $('analysisStatusDot'),
+    analysisStatusText: $('analysisStatusText'),
+    feedbackBox: $('feedbackBox'),
+    feedbackText: $('feedbackText'),
+    resultsPanel: $('resultsPanel'),
+    resultHero: $('resultHero'),
+    categoryBadge: $('categoryBadge'),
+    icvValue: $('icvValue'),
+    icvProgress: $('icvProgress'),
+    icvBar: $('icvBar'),
+    justificationText: $('justificationText'),
+    driverRisksText: $('driverRisksText'),
+    pedestrianRisksText: $('pedestrianRisksText'),
+    resultLocation: $('resultLocation'),
+    resultCoords: $('resultCoords'),
+    resultTimestamp: $('resultTimestamp'),
+    panelScroll: $('panelScroll'),
+    mapShell: $('mapShell'),
+    mapLoadError: $('mapLoadError'),
+    mapPointCount: $('mapPointCount'),
+    mapPointLabel: $('mapPointLabel'),
+    mapAvgIcv: $('mapAvgIcv'),
+    mapZoneLabel: $('mapZoneLabel'),
+    mapCoords: $('mapCoords'),
+    mapStatusDot: $('mapStatusDot'),
+    mapStatusText: $('mapStatusText'),
+    mapEmptyHint: $('mapEmptyHint'),
+    recenterMapBtn: $('recenterMapBtn'),
+    clearMapBtn: $('clearMapBtn'),
+    toastStack: $('toastStack')
+  };
+
+  const state = {
+    image: null,
+    analyzing: false,
+    points: [],
+    mapReady: false,
+    storedKey: ''
+  };
+
+  let map = null;
+  let markerLayer = null;
+  let mapResizeObserver = null;
+
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function riskFromIcv(icv) {
+    if (icv >= 7) return RISK_LEVELS.red;
+    if (icv >= 3) return RISK_LEVELS.yellow;
+    return RISK_LEVELS.green;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    })[character]);
+  }
+
+  function formatBytes(bytes) {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const value = bytes / Math.pow(1024, index);
+    return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+  }
+
+  function formatCoordinates(latitude, longitude) {
+    const lat = `${Math.abs(latitude).toFixed(4)}° ${latitude >= 0 ? 'N' : 'S'}`;
+    const lng = `${Math.abs(longitude).toFixed(4)}° ${longitude >= 0 ? 'E' : 'W'}`;
+    return `${lat} · ${lng}`;
+  }
+
+  function formatCoordinateValue(value, positive, negative) {
+    return `${Math.abs(value).toFixed(4)}° ${value >= 0 ? positive : negative}`;
+  }
+
+  function setAnalysisStatus(text, tone = 'idle') {
+    dom.analysisStatusText.textContent = text;
+    dom.analysisStatusDot.dataset.tone = tone;
+  }
+
+  function setMapStatus(text, tone = 'success') {
+    dom.mapStatusText.textContent = text;
+    dom.mapStatusDot.dataset.tone = tone;
+  }
+
+  function showFeedback(message, tone = 'error') {
+    dom.feedbackBox.dataset.tone = tone;
+    dom.feedbackText.textContent = message;
+    dom.feedbackBox.classList.remove('hidden');
+  }
+
+  function hideFeedback() {
+    dom.feedbackBox.classList.add('hidden');
+    dom.feedbackText.textContent = '';
+  }
+
+  function showToast(message, type = 'info') {
+    if (!dom.toastStack) return;
+    while (dom.toastStack.children.length >= 4) {
+      dom.toastStack.firstElementChild?.remove();
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'toast-item';
+    toast.dataset.type = type;
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    const text = document.createElement('p');
+    text.className = 'min-w-0 flex-1';
+    text.textContent = message;
+    toast.appendChild(text);
+    dom.toastStack.appendChild(toast);
+
+    requestAnimationFrame(() => toast.classList.add('is-visible'));
+    window.setTimeout(() => {
+      toast.classList.remove('is-visible');
+      window.setTimeout(() => toast.remove(), 260);
+    }, 4600);
+  }
+
+  function keyValue() {
+    return dom.apiKeyInput.value.trim();
+  }
+
+  function hasFormInputs() {
+    return Boolean(state.image && keyValue() && dom.locationInput.value.trim());
+  }
+
+  function updateKeyBadge() {
+    const value = keyValue();
+    let stateName = 'empty';
+    let label = 'No key';
+
+    if (value) {
+      const isSaved = Boolean(state.storedKey) && value === state.storedKey;
+      stateName = isSaved ? 'saved' : 'memory';
+      label = isSaved ? 'Saved' : 'In memory';
+    }
+
+    dom.keyStateBadge.dataset.state = stateName;
+    dom.keyStateBadge.textContent = label;
+  }
+
+  function updateAnalyzeAvailability(updateIdleMessage = true) {
+    const ready = hasFormInputs();
+    dom.analyzeBtn.disabled = state.analyzing || !ready;
+
+    if (state.analyzing || !updateIdleMessage) return;
+
+    if (!state.image) {
+      setAnalysisStatus('Upload an image to start the analysis.', 'idle');
+    } else if (!keyValue()) {
+      setAnalysisStatus('Add your OpenRouter API key to continue.', 'warning');
+    } else if (!dom.locationInput.value.trim()) {
+      setAnalysisStatus('Enter a location within Hong Kong.', 'warning');
+    } else {
+      setAnalysisStatus('Ready. Image and location prepared for analysis.', 'ready');
+    }
+  }
+
+  function setAnalyzing(active, refreshStatus = true) {
+    state.analyzing = active;
+    dom.analyzeBtn.setAttribute('aria-busy', String(active));
+    dom.analyzeIdle.classList.toggle('hidden', active);
+    dom.analyzeLoading.classList.toggle('hidden', !active);
+    dom.analyzeLoading.classList.toggle('flex', active);
+    dom.analyzeBtn.disabled = active || !hasFormInputs();
+
+    if (active) {
+      hideFeedback();
+      dom.resultsPanel.classList.add('hidden');
+      setAnalysisStatus('OpenRouter is assessing the 7 visual risk factors…', 'working');
+    } else if (refreshStatus) {
+      updateAnalyzeAvailability(true);
+    }
+  }
+
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Could not read the image file.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function getImageDimensions(dataUrl) {
+    return new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+      image.onerror = () => resolve(null);
+      image.src = dataUrl;
+    });
+  }
+
+  function toJpegDataUrl(sourceDataUrl, maxDimension = 1600, quality = 0.88) {
+    return new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => {
+        try {
+          const naturalWidth = image.naturalWidth || 0;
+          const naturalHeight = image.naturalHeight || 0;
+          if (!naturalWidth || !naturalHeight) {
+            resolve(sourceDataUrl);
+            return;
+          }
+          const scale = Math.min(1, maxDimension / Math.max(naturalWidth, naturalHeight));
+          const width = Math.max(1, Math.round(naturalWidth * scale));
+          const height = Math.max(1, Math.round(naturalHeight * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const context = canvas.getContext('2d');
+          if (!context) {
+            resolve(sourceDataUrl);
+            return;
+          }
+          context.fillStyle = '#0b0f19';
+          context.fillRect(0, 0, width, height);
+          context.drawImage(image, 0, 0, width, height);
+          const jpeg = canvas.toDataURL('image/jpeg', quality);
+          resolve(jpeg.startsWith('data:image/jpeg') ? jpeg : sourceDataUrl);
+        } catch {
+          resolve(sourceDataUrl);
+        }
+      };
+      image.onerror = () => resolve(sourceDataUrl);
+      image.src = sourceDataUrl;
+    });
+  }
+
+  async function handleImageFile(file) {
+    if (!file) return;
+    hideFeedback();
+
+    const mimeType = String(file.type || '').toLowerCase();
+    if (!SUPPORTED_TYPES.has(mimeType)) {
+      showFeedback('Unsupported format. Use a JPG, PNG, WebP, or GIF image.');
+      setAnalysisStatus('The selected file is not a supported image.', 'error');
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      showFeedback(`The image is ${formatBytes(file.size)}. The limit is 10 MB.`);
+      setAnalysisStatus('The image exceeds the maximum allowed size.', 'error');
+      return;
+    }
+
+    try {
+      const originalDataUrl = await readFileAsDataURL(file);
+      const dimensions = await getImageDimensions(originalDataUrl);
+      const dataUrl = await toJpegDataUrl(originalDataUrl);
+
+      state.image = {
+        dataUrl,
+        mimeType: 'image/jpeg',
+        name: file.name || 'image',
+        size: file.size,
+        width: dimensions?.width || null,
+        height: dimensions?.height || null
+      };
+
+      dom.imagePreview.src = dataUrl;
+      dom.imagePreview.alt = `Preview of ${file.name || 'the urban image'}`;
+      dom.imageMeta.textContent = [
+        file.name || 'image',
+        formatBytes(file.size),
+        dimensions ? `${dimensions.width}×${dimensions.height}` : null
+      ].filter(Boolean).join(' · ');
+
+      dom.dropEmpty.classList.add('hidden');
+      dom.imagePreviewWrap.classList.remove('hidden');
+      dom.dropZone.classList.add('has-image');
+      dom.removeImageBtn.classList.remove('hidden');
+
+      hideFeedback();
+      updateAnalyzeAvailability(false);
+      if (keyValue() && dom.locationInput.value.trim()) {
+        setAnalysisStatus('Image loaded. Ready to analyze the urban scene.', 'ready');
+      }
+    } catch (error) {
+      showFeedback(error instanceof Error ? error.message : 'Could not process the image.');
+      setAnalysisStatus('Error loading the image.', 'error');
+    } finally {
+      dom.imageInput.value = '';
+    }
+  }
+
+  function clearImage() {
+    state.image = null;
+    dom.imagePreview.removeAttribute('src');
+    dom.imagePreviewWrap.classList.add('hidden');
+    dom.dropEmpty.classList.remove('hidden');
+    dom.dropZone.classList.remove('has-image');
+    dom.imageMeta.textContent = '';
+    dom.imageInput.value = '';
+    hideFeedback();
+    updateAnalyzeAvailability(true);
+  }
+
+  function selectLocation(location) {
+    dom.locationInput.value = location;
+    hideFeedback();
+    updateAnalyzeAvailability(false);
+    if (state.image && keyValue()) {
+      setAnalysisStatus(`Zone selected: ${location}. Ready to analyze.`, 'ready');
+    } else {
+      updateAnalyzeAvailability(true);
+    }
+  }
+
+  const ANALYSIS_PROMPT = `Evaluate the attached image according to the MULTIDISCIPLINARY URBAN VISUAL POLLUTION RUBRIC.
+Analyze the 7 factors: Luminance/Night-time lighting, Dynamism/Motion, Density/Advertising clutter, Obstruction of road signage, Scale/Proportion, Chromaticity/Confusion with traffic lights, and Location at decision points.
+
+SCIENTIFIC REFERENCE RUBRIC:
+- CATEGORY 1: HIGH RISK (ICV 7.0 - 10.0). Luminance >500 cd/m²; animated/flickering displays with changes <8 s; >5 elements within 50 m or cables covering >30% of the visual background; direct obstruction of traffic lights/signs; location at intersections <30 m; color confusion with traffic lights. Impact: inattentional blindness, gaze diversion >2.5 s, braking delay +0.6 s to +1.2 s.
+- CATEGORY 2: MEDIUM RISK (ICV 3.0 - 6.9). Luminance 150-499 cd/m²; mechanical rotation or sequential lighting; 2-4 elements within 100 m; no direct occlusion but competes in peripheral vision; location 30-80 m from decision nodes. Impact: tunnel vision, eye fatigue, mind-wandering.
+- CATEGORY 3: LOW RISK (ICV 0.0 - 2.9). Indirect lighting <100 cd/m²; static elements; maximum 1 element per 200 m; set back >3 m from the carriageway. Impact: focused attention (eyes-on-road), optimal reaction time 0.75 s-1.0 s.
+
+Classify the image strictly into one of these 3 categories:
+- CATEGORY 1: HIGH RISK (ICV 7.0 - 10.0) -> Red indicator
+- CATEGORY 2: MEDIUM RISK (ICV 3.0 - 6.9) -> Yellow indicator
+- CATEGORY 3: LOW RISK (ICV 0.0 - 2.9) -> Green indicator
+
+Return ONLY a valid JSON object with this exact format (no additional markdown):
+{
+  "category": "CATEGORY 1: HIGH RISK",
+  "icv": 8.5,
+  "risk_color": "red",
+  "justification": "Detailed explanation of the observed elements...",
+  "driver_risks": "Neurocognitive effects on drivers (e.g. inattentional blindness, reaction time)...",
+  "pedestrian_risks": "Effects on pedestrians (e.g. loss of spatial awareness, glare)..."
+}
+
+ICV must be a decimal number between 0.0 and 10.0. Write the text in technical English, concretely and observationally. Do not include any text outside the JSON object.`;
+
+  async function fetchWithTimeout(url, options, timeoutMs, timeoutMessage) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        throw new Error(timeoutMessage);
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+
+  function describeOpenRouterError(status, apiMessage, modelLabel, isLastModel = false) {
+    const message = String(apiMessage || '').trim();
+    const lower = message.toLowerCase();
+
+    if (status === 400 && (lower.includes('api key') || lower.includes('invalid api key'))) {
+      return 'The OpenRouter API key is invalid. Check it, save it again, and retry.';
+    }
+    if (status === 401) {
+      return 'The OpenRouter API key is invalid or was revoked. Check it at openrouter.ai/keys.';
+    }
+    if (status === 402) {
+      return 'Your OpenRouter account has insufficient credits for this model. Check your daily limit or add credit.';
+    }
+    if (status === 403) {
+      return 'This key does not have permission to use this OpenRouter model.';
+    }
+    if (status === 404) {
+      return isLastModel
+        ? 'No free vision model is available on OpenRouter right now. Check openrouter.ai/models or try again later.'
+        : `The model ${modelLabel} is not available on OpenRouter right now. Trying the fallback model.`;
+    }
+    if (status === 429) {
+      return 'The OpenRouter request or free-quota limit was reached. Wait a moment and try again.';
+    }
+    if (status >= 500) {
+      return 'OpenRouter is unavailable right now. Please try again in a few seconds.';
+    }
+    if (status === 400 || status === 422) {
+      return message
+        ? `OpenRouter rejected the request: ${message.slice(0, 240)}`
+        : 'OpenRouter rejected the request. Try another image.';
+    }
+    return message ? message.slice(0, 280) : `OpenRouter returned HTTP error ${status}.`;
+  }
+
+  function extractMessageText(payload) {
+    const content = payload?.choices?.[0]?.message?.content;
+    if (typeof content === 'string') return content.trim();
+    if (Array.isArray(content)) {
+      return content
+        .map((part) => {
+          if (typeof part === 'string') return part;
+          if (typeof part?.text === 'string') return part.text;
+          return '';
+        })
+        .join('\n')
+        .trim();
+    }
+    return '';
+  }
+
+  async function analyzeVisualPollution(image, apiKey) {
+    if (!image || !image.dataUrl) {
+      throw new Error('There is no image ready to analyze.');
+    }
+    if (!String(image.dataUrl).startsWith('data:image/')) {
+      throw new Error('The image is not in a valid format for analysis.');
+    }
+
+    let lastError = null;
+
+    for (let index = 0; index < OPENROUTER_MODELS.length; index += 1) {
+      const model = OPENROUTER_MODELS[index];
+      const isLastModel = index === OPENROUTER_MODELS.length - 1;
+      let response;
+
+      try {
+        response = await fetchWithTimeout(
+          OPENROUTER_ENDPOINT,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${apiKey}`,
+              'X-Title': 'Visual Pollution Analyzer HK'
+            },
+            body: JSON.stringify({
+              model: model.id,
+              messages: [{
+                role: 'user',
+                content: [
+                  { type: 'text', text: ANALYSIS_PROMPT },
+                  { type: 'image_url', image_url: { url: image.dataUrl } }
+                ]
+              }],
+              temperature: 0.2,
+              max_tokens: 2400
+            })
+          },
+          45000,
+          `Analysis with ${model.label} took too long to respond.`
+        );
+      } catch (error) {
+        lastError = error instanceof Error && error.message.includes('took too long')
+          ? error
+          : new Error('Could not reach OpenRouter. Check your internet connection and try again.');
+        continue;
+      }
+
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+
+      if (!response.ok) {
+        const apiMessage = payload?.error?.message || payload?.message;
+        const requestError = new Error(describeOpenRouterError(response.status, apiMessage, model.label, isLastModel));
+        requestError.status = response.status;
+        lastError = requestError;
+        if (response.status === 401 || response.status === 402 || response.status === 403) {
+          throw requestError;
+        }
+        continue;
+      }
+
+      if (payload?.error) {
+        lastError = new Error(describeOpenRouterError(response.status, payload.error.message, model.label, isLastModel));
+        continue;
+      }
+
+      const content = extractMessageText(payload);
+      if (!content) {
+        lastError = new Error(
+          isLastModel
+            ? `The model ${model.label} returned no analyzable text. Try another image.`
+            : `The model ${model.label} returned no analyzable text. Trying the fallback model…`
+        );
+        continue;
+      }
+
+      try {
+        const analysis = normalizeAnalysis(parseModelJson(content));
+        analysis.model = model.id;
+        return analysis;
+      } catch {
+        lastError = new Error(
+          isLastModel
+            ? 'No model returned valid JSON for this image. Please try again.'
+            : `The model ${model.label} returned an invalid response. Trying the fallback model…`
+        );
+      }
+    }
+
+    throw lastError || new Error('Could not complete the analysis with OpenRouter. Please try again.');
+  }
+
+  function parseModelJson(text) {
+    const cleaned = String(text)
+      .replace(/```json/gi, '')
+      .replace(/```/g, '')
+      .trim();
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+
+    if (start === -1 || end === -1 || end <= start) {
+      throw new Error('The model response does not contain a valid JSON object.');
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned.slice(start, end + 1));
+    } catch {
+      throw new Error('Could not parse the JSON returned by the model.');
+    }
+
+    if (Array.isArray(parsed)) parsed = parsed[0];
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('The model response does not have the expected format.');
+    }
+    return parsed;
+  }
+
+  function cleanModelText(value, fallback, maxLength = 2200) {
+    const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+    return (text || fallback).slice(0, maxLength);
+  }
+
+  function normalizeAnalysis(parsed) {
+    const rawIcv = String(parsed?.icv ?? '').replace(',', '.').trim();
+    const numericIcv = Number(rawIcv);
+
+    if (!Number.isFinite(numericIcv)) {
+      throw new Error('The model returned an invalid ICV score.');
+    }
+
+    const icv = Math.round(clamp(numericIcv, 0, 10) * 10) / 10;
+    const risk = riskFromIcv(icv);
+
+    return {
+      icv,
+      risk,
+      category: risk.category,
+      justification: cleanModelText(
+        parsed?.justification,
+        'The analysis did not include a detailed technical justification.',
+        2400
+      ),
+      driverRisks: cleanModelText(
+        parsed?.driver_risks,
+        'No specific description of the neurocognitive impact on drivers was received.',
+        1800
+      ),
+      pedestrianRisks: cleanModelText(
+        parsed?.pedestrian_risks,
+        'No specific description of the neurocognitive impact on pedestrians was received.',
+        1800
+      )
+    };
+  }
+
+  async function geocodeLocation(location) {
+    const normalizedLocation = String(location || '').trim();
+    if (!normalizedLocation) {
+      throw new Error('Enter a location within Hong Kong.');
+    }
+
+    const query = /hong\s*kong/i.test(normalizedLocation)
+      ? normalizedLocation
+      : `${normalizedLocation}, Hong Kong`;
+
+    const params = new URLSearchParams({
+      format: 'json',
+      q: query,
+      viewbox: HK_VIEWBOX,
+      bounded: '1',
+      limit: '1'
+    });
+
+    let response;
+    try {
+      response = await fetchWithTimeout(
+        `https://nominatim.openstreetmap.org/search?${params.toString()}`,
+        { headers: { Accept: 'application/json', 'Accept-Language': 'en' } },
+        15000,
+        'Geocoding took too long. Please try again.'
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('took too long')) throw error;
+      throw new Error('Could not reach Nominatim to geolocate the area.');
+    }
+
+    if (response.status === 429) {
+      throw new Error('Nominatim temporarily rate-limited requests. Wait a few seconds and retry.');
+    }
+    if (!response.ok) {
+      throw new Error(`Nominatim returned HTTP error ${response.status}.`);
+    }
+
+    let results;
+    try {
+      results = await response.json();
+    } catch {
+      throw new Error('Nominatim returned an unreadable response.');
+    }
+
+    if (!Array.isArray(results) || results.length === 0) {
+      throw new Error(`"${normalizedLocation}" was not found within Hong Kong. Try a neighborhood or district.`);
+    }
+
+    const latitude = Number(results[0]?.lat);
+    const longitude = Number(results[0]?.lon);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new Error('Nominatim returned invalid coordinates.');
+    }
+
+    const displayName = String(results[0]?.display_name || '');
+    if (displayName && !/hong\s*kong|香港/i.test(displayName)) {
+      throw new Error(`"${normalizedLocation}" was not found within Hong Kong. Try a neighborhood or district.`);
+    }
+
+    return {
+      latitude,
+      longitude,
+      displayName: displayName || normalizedLocation
+    };
+  }
+
+  function animateIcv(targetValue) {
+    if (reducedMotion || document.hidden) {
+      dom.icvValue.textContent = targetValue.toFixed(1);
+      return;
+    }
+
+    const startValue = Number.parseFloat(dom.icvValue.textContent) || 0;
+    const startTime = performance.now();
+    const duration = 760;
+
+    function tick(now) {
+      const progress = clamp((now - startTime) / duration, 0, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      dom.icvValue.textContent = (startValue + (targetValue - startValue) * eased).toFixed(1);
+      if (progress < 1) requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+  }
+
+  function renderResults(analysis, locationName, geocode, point) {
+    const risk = analysis.risk;
+
+    dom.resultHero.style.setProperty('--risk', risk.color);
+    dom.resultHero.style.setProperty('--risk-rgb', risk.rgb);
+
+    dom.categoryBadge.textContent = risk.category;
+    dom.categoryBadge.style.color = risk.color;
+    dom.categoryBadge.style.borderColor = `rgba(${risk.rgb}, .48)`;
+    dom.categoryBadge.style.backgroundColor = `rgba(${risk.rgb}, .13)`;
+
+    dom.resultLocation.textContent = locationName;
+    dom.resultLocation.title = geocode?.displayName || locationName;
+
+    dom.icvValue.textContent = '0.0';
+    animateIcv(analysis.icv);
+    dom.icvProgress.setAttribute('aria-valuenow', String(analysis.icv));
+    dom.icvBar.style.width = '0%';
+    if (reducedMotion || document.hidden) {
+      dom.icvBar.style.width = `${analysis.icv * 10}%`;
+    } else {
+      requestAnimationFrame(() => {
+        dom.icvBar.style.width = `${analysis.icv * 10}%`;
+      });
+    }
+
+    dom.justificationText.textContent = analysis.justification;
+    dom.driverRisksText.textContent = analysis.driverRisks;
+    dom.pedestrianRisksText.textContent = analysis.pedestrianRisks;
+
+    const now = new Date();
+    let formattedDate;
+    try {
+      formattedDate = new Intl.DateTimeFormat('en-HK', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(now);
+    } catch {
+      formattedDate = now.toLocaleString();
+    }
+
+    dom.resultTimestamp.textContent = `Analyzed ${formattedDate}`;
+    dom.resultCoords.textContent = point
+      ? formatCoordinates(point.latitude, point.longitude)
+      : 'No geolocation';
+
+    dom.resultsPanel.classList.remove('hidden');
+    dom.resultsPanel.classList.remove('result-enter');
+    void dom.resultsPanel.offsetWidth;
+    dom.resultsPanel.classList.add('result-enter');
+
+    window.setTimeout(() => {
+      if (dom.resultsPanel.classList.contains('hidden')) return;
+      dom.resultsPanel.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' });
+    }, 140);
+  }
+
+  function initMap() {
+    if (!window.L) {
+      showMapError();
+      return;
+    }
+
+    try {
+      map = L.map('map', {
+        zoomControl: false,
+        attributionControl: true,
+        preferCanvas: true,
+        minZoom: 10,
+        maxZoom: 19,
+        zoomSnap: 0.5,
+        worldCopyJump: true
+      });
+
+      const esriAttribution = 'Tiles &copy; <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a> — Esri, HERE, Garmin, &copy; OpenStreetMap contributors, and the GIS user community';
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: esriAttribution,
+        maxZoom: 19
+      }).addTo(map);
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19
+      }).addTo(map);
+
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+      markerLayer = L.layerGroup().addTo(map);
+      map.setView(HK_CENTER, 12);
+
+      map.on('mousemove', (event) => {
+        dom.mapCoords.textContent = formatCoordinates(event.latlng.lat, event.latlng.lng);
+      });
+
+      state.mapReady = true;
+      updateMapStats();
+      setMapCoords(HK_CENTER[0], HK_CENTER[1]);
+
+      window.setTimeout(() => map?.invalidateSize({ pan: false }), 220);
+
+      if ('ResizeObserver' in window) {
+        mapResizeObserver = new ResizeObserver(() => {
+          map?.invalidateSize({ pan: false });
+        });
+        mapResizeObserver.observe(dom.mapShell);
+      } else {
+        window.addEventListener('resize', () => map?.invalidateSize({ pan: false }));
+      }
+    } catch (error) {
+      console.error('Map initialization failed:', error);
+      showMapError();
+    }
+  }
+
+  function showMapError() {
+    state.mapReady = false;
+    dom.mapLoadError.classList.remove('hidden');
+    dom.mapLoadError.classList.add('grid');
+    setMapStatus('Map unavailable', 'error');
+  }
+
+  function setMapCoords(latitude, longitude) {
+    dom.mapCoords.textContent = `${formatCoordinateValue(latitude, 'N', 'S')} · ${formatCoordinateValue(longitude, 'E', 'W')}`;
+  }
+
+  function updateMapStats() {
+    const total = state.points.length;
+    dom.mapPointCount.textContent = String(total);
+    dom.mapPointLabel.textContent = total === 1 ? 'Point' : 'Points';
+    dom.clearMapBtn.disabled = total === 0;
+
+    if (total === 0) {
+      dom.mapAvgIcv.textContent = '—';
+    } else {
+      const average = state.points.reduce((sum, point) => sum + point.icv, 0) / total;
+      dom.mapAvgIcv.textContent = average.toFixed(1);
+    }
+  }
+
+  function buildPopupMarkup(analysis, locationName, latitude, longitude, image) {
+    const risk = analysis.risk;
+    const justification = analysis.justification.length > 154
+      ? `${analysis.justification.slice(0, 152).trim()}…`
+      : analysis.justification;
+
+    return `
+      <div class="risk-popup-card" style="--risk:${risk.color};--risk-rgb:${risk.rgb}">
+        <div class="popup-thumb">
+          <img src="${image.dataUrl}" alt="Analyzed photo of ${escapeHtml(locationName)}" />
+          <div class="popup-thumb-shade"></div>
+          <span class="popup-badge">${escapeHtml(risk.category)}</span>
+        </div>
+        <div class="popup-body">
+          <p class="popup-kicker">HONG KONG · RISK POINT</p>
+          <h3 class="popup-title">${escapeHtml(locationName)}</h3>
+          <div class="popup-score-line">
+            <span class="popup-score">${analysis.icv.toFixed(1)}</span>
+            <span class="popup-score-max">/10 ICV</span>
+            <span class="popup-risk-label">${escapeHtml(risk.shortLabel)}</span>
+          </div>
+          <p class="popup-justification">${escapeHtml(justification)}</p>
+          <p class="popup-coords">${formatCoordinateValue(latitude, 'N', 'S')} · ${formatCoordinateValue(longitude, 'E', 'W')} · ±${JITTER_RANGE}°</p>
+        </div>
+      </div>`;
+  }
+
+  function addRiskMarker(analysis, geocode, locationName, image) {
+    if (!state.mapReady || !map || !markerLayer) return null;
+
+    const jitterLatitude = (Math.random() * 2 - 1) * JITTER_RANGE;
+    const jitterLongitude = (Math.random() * 2 - 1) * JITTER_RANGE;
+    const latitude = geocode.latitude + jitterLatitude;
+    const longitude = geocode.longitude + jitterLongitude;
+    const risk = analysis.risk;
+
+    const markerIcon = L.divIcon({
+      className: 'risk-div-icon',
+      html: `
+        <div class="risk-marker" style="--risk:${risk.color}">
+          <span class="risk-ring"></span>
+          <span class="risk-ring risk-ring-delay"></span>
+          <span class="risk-core"></span>
+        </div>`,
+      iconSize: [48, 48],
+      iconAnchor: [24, 24],
+      popupAnchor: [0, -17]
+    });
+
+    const marker = L.marker([latitude, longitude], {
+      icon: markerIcon,
+      title: `ICV ${analysis.icv.toFixed(1)} · ${locationName}`,
+      alt: `${risk.name} point in ${locationName}, ICV ${analysis.icv.toFixed(1)}`,
+      riseOnHover: true,
+      keyboard: true,
+      zIndexOffset: 500
+    });
+
+    marker.bindPopup(
+      buildPopupMarkup(analysis, locationName, latitude, longitude, image),
+      {
+        className: 'risk-popup',
+        maxWidth: 300,
+        minWidth: 270,
+        closeButton: true,
+        autoPanPaddingTopLeft: L.point(76, 112),
+        autoPanPaddingBottomRight: L.point(56, 84)
+      }
+    );
+
+    marker.addTo(markerLayer);
+
+    L.circle([latitude, longitude], {
+      radius: 105,
+      color: risk.color,
+      weight: 1.4,
+      opacity: 0.58,
+      fillColor: risk.color,
+      fillOpacity: 0.075,
+      dashArray: '4 8',
+      interactive: false
+    }).addTo(markerLayer);
+
+    const point = {
+      latitude,
+      longitude,
+      icv: analysis.icv,
+      risk: risk.key,
+      location: locationName,
+      marker
+    };
+
+    state.points.push(point);
+    updateMapStats();
+
+    dom.mapEmptyHint.classList.add('hidden');
+    dom.mapZoneLabel.textContent = `${locationName.toUpperCase()} · ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    dom.mapZoneLabel.title = geocode.displayName || locationName;
+    setMapCoords(latitude, longitude);
+    setMapStatus('Point geolocated', 'success');
+
+    map.flyTo([latitude, longitude], 15, {
+      animate: true,
+      duration: reducedMotion ? 0 : 1.45,
+      easeLinearity: 0.2
+    });
+
+    return point;
+  }
+
+  function clearMap() {
+    if (!state.mapReady || !map || !markerLayer) return;
+
+    markerLayer.clearLayers();
+    state.points = [];
+    updateMapStats();
+    dom.mapEmptyHint.classList.remove('hidden');
+    dom.mapZoneLabel.textContent = 'HONG KONG · NO POINTS LOADED';
+    dom.mapZoneLabel.removeAttribute('title');
+    setMapCoords(HK_CENTER[0], HK_CENTER[1]);
+    setMapStatus('Map clear', 'success');
+    map.flyTo(HK_CENTER, 12, {
+      animate: true,
+      duration: reducedMotion ? 0 : 1.2
+    });
+    showToast('Map reset. No risk points remain.', 'info');
+  }
+
+  function recenterMap() {
+    if (!state.mapReady || !map) return;
+    map.flyTo(HK_CENTER, 12, {
+      animate: true,
+      duration: reducedMotion ? 0 : 1.2
+    });
+    setMapCoords(HK_CENTER[0], HK_CENTER[1]);
+  }
+
+  async function runAnalysis() {
+    if (state.analyzing) return;
+
+    hideFeedback();
+    const imageSnapshot = state.image;
+    const apiKey = keyValue();
+    const locationName = dom.locationInput.value.trim();
+
+    if (!imageSnapshot) {
+      showFeedback('Upload an urban image before starting the analysis.');
+      setAnalysisStatus('The reference image is missing.', 'error');
+      return;
+    }
+    if (!apiKey) {
+      showFeedback('Enter your OpenRouter API key to query the vision model.');
+      setAnalysisStatus('The OpenRouter API key is missing.', 'error');
+      return;
+    }
+    if (!locationName) {
+      showFeedback('Enter a Hong Kong location, for example Mong Kok or Central.');
+      setAnalysisStatus('The Hong Kong location is missing.', 'error');
+      return;
+    }
+
+    setAnalyzing(true);
+
+    try {
+      const [analysisOutcome, geocodeOutcome] = await Promise.allSettled([
+        analyzeVisualPollution(imageSnapshot, apiKey),
+        geocodeLocation(locationName)
+      ]);
+
+      if (analysisOutcome.status === 'rejected') {
+        throw analysisOutcome.reason;
+      }
+
+      const analysis = analysisOutcome.value;
+      const geocode = geocodeOutcome.status === 'fulfilled' ? geocodeOutcome.value : null;
+      let point = null;
+
+      if (geocode) {
+        point = addRiskMarker(analysis, geocode, locationName, imageSnapshot);
+      }
+
+      renderResults(analysis, locationName, geocode, point);
+
+      if (point) {
+        setAnalysisStatus(
+          `Analysis complete. ${analysis.risk.name} point added to the map.`,
+          'success'
+        );
+        showToast(`Diagnosis ${analysis.risk.shortLabel} · ICV ${analysis.icv.toFixed(1)} added to the map.`, 'success');
+      } else {
+        const reason = geocodeOutcome.status === 'rejected'
+          ? (geocodeOutcome.reason instanceof Error ? geocodeOutcome.reason.message : 'Could not geolocate the area.')
+          : 'The map is not available right now.';
+        setAnalysisStatus('Analysis complete, but the point could not be mapped.', 'warning');
+        showFeedback(`${reason} You can correct the location and analyze again.`, 'warning');
+        showToast('Diagnosis complete without a map point.', 'warning');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'An unexpected error occurred during the analysis.';
+      showFeedback(message);
+      setAnalysisStatus('Could not complete the analysis. Check the message.', 'error');
+      showToast(message, 'error');
+    } finally {
+      setAnalyzing(false, false);
+    }
+  }
+
+  const EYE_OPEN_ICON = `
+    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+      <path d="M2.4 12s3.5-6.1 9.6-6.1S21.6 12 21.6 12s-3.5 6.1-9.6 6.1S2.4 12 2.4 12Z" stroke-linecap="round" stroke-linejoin="round"></path>
+      <circle cx="12" cy="12" r="2.8"></circle>
+    </svg>`;
+
+  const EYE_CLOSED_ICON = `
+    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+      <path d="M3 3l18 18M10.6 6.1A10.5 10.5 0 0 1 12 6c6.1 0 9.6 6 9.6 6a16.8 16.8 0 0 1-4 4.5M6.4 6.4C3.8 8.2 2.4 12 2.4 12s3.5 6 9.6 6a10 10 0 0 0 4.3-.9" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>`;
+
+  function loadStoredKey() {
+    try {
+      const stored = localStorage.getItem(KEY_STORAGE);
+      state.storedKey = stored ? stored.trim() : '';
+    } catch {
+      state.storedKey = '';
+    }
+
+    if (state.storedKey) {
+      dom.apiKeyInput.value = state.storedKey;
+    }
+
+    updateKeyBadge();
+  }
+
+  function saveApiKey() {
+    const value = keyValue();
+
+    try {
+      if (value) {
+        localStorage.setItem(KEY_STORAGE, value);
+        state.storedKey = value;
+        showToast('OpenRouter API key saved in this browser.', 'success');
+      } else {
+        localStorage.removeItem(KEY_STORAGE);
+        state.storedKey = '';
+        showToast('Key removed from local storage.', 'info');
+      }
+    } catch {
+      state.storedKey = '';
+      if (value) {
+        showToast('Could not save the key to localStorage. It will remain available in memory.', 'warning');
+      } else {
+        showToast('Could not access local storage in this browser.', 'warning');
+      }
+    }
+
+    updateKeyBadge();
+    updateAnalyzeAvailability(false);
+
+    if (value && hasFormInputs()) {
+      setAnalysisStatus('Key available. Ready to analyze the urban scene.', 'ready');
+    } else if (!value) {
+      updateAnalyzeAvailability(true);
+    }
+  }
+
+  function toggleKeyVisibility() {
+    const willShow = dom.apiKeyInput.type === 'password';
+    dom.apiKeyInput.type = willShow ? 'text' : 'password';
+    dom.toggleKeyBtn.innerHTML = willShow ? EYE_CLOSED_ICON : EYE_OPEN_ICON;
+    dom.toggleKeyBtn.setAttribute('aria-pressed', String(willShow));
+    dom.toggleKeyBtn.setAttribute('aria-label', willShow ? 'Hide key' : 'Show key');
+    dom.toggleKeyBtn.title = willShow ? 'Hide key' : 'Show key';
+    dom.apiKeyInput.focus({ preventScroll: true });
+    const length = dom.apiKeyInput.value.length;
+    try {
+      dom.apiKeyInput.setSelectionRange(length, length);
+    } catch {
+      /* Some browsers do not expose selection on password fields. */
+    }
+  }
+
+  function bindEvents() {
+    dom.toggleKeyBtn.addEventListener('click', toggleKeyVisibility);
+    dom.saveKeyBtn.addEventListener('click', saveApiKey);
+
+    dom.apiKeyInput.addEventListener('input', () => {
+      updateKeyBadge();
+      updateAnalyzeAvailability(true);
+      if (dom.feedbackBox.dataset.tone === 'error') hideFeedback();
+    });
+
+    dom.apiKeyInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        saveApiKey();
+      }
+    });
+
+    dom.imageInput.addEventListener('change', (event) => {
+      const file = event.target.files?.[0];
+      if (file) handleImageFile(file);
+    });
+
+    dom.dropEmpty.addEventListener('click', () => {
+      dom.imageInput.click();
+    });
+
+    dom.replaceImageBtn.addEventListener('click', () => {
+      dom.imageInput.click();
+    });
+
+    dom.removeImageBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      clearImage();
+    });
+
+    let dragDepth = 0;
+    dom.dropZone.addEventListener('dragenter', (event) => {
+      event.preventDefault();
+      dragDepth += 1;
+      dom.dropZone.classList.add('is-dragging');
+    });
+    dom.dropZone.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    });
+    dom.dropZone.addEventListener('dragleave', (event) => {
+      event.preventDefault();
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) dom.dropZone.classList.remove('is-dragging');
+    });
+    dom.dropZone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      dragDepth = 0;
+      dom.dropZone.classList.remove('is-dragging');
+      const file = event.dataTransfer?.files?.[0];
+      if (file) handleImageFile(file);
+    });
+
+    document.querySelectorAll('[data-location]').forEach((button) => {
+      button.addEventListener('click', () => {
+        selectLocation(button.dataset.location || '');
+      });
+    });
+
+    dom.locationInput.addEventListener('input', () => {
+      updateAnalyzeAvailability(true);
+      if (dom.feedbackBox.dataset.tone === 'error') hideFeedback();
+    });
+
+    dom.locationInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !dom.analyzeBtn.disabled) {
+        event.preventDefault();
+        runAnalysis();
+      }
+    });
+
+    dom.analyzeBtn.addEventListener('click', runAnalysis);
+    dom.recenterMapBtn.addEventListener('click', recenterMap);
+    dom.clearMapBtn.addEventListener('click', clearMap);
+  }
+
+  loadStoredKey();
+  bindEvents();
+  updateAnalyzeAvailability(true);
+  updateMapStats();
+  initMap();
+})();
+  </script>
+</body>
+</html>
+
+
+
